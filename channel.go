@@ -22,11 +22,12 @@ type channelPool struct {
 	sync.Mutex                   //锁，操作pool时用到
 	freeConn     []*idleConn     //空闲连接
 	waitingQueue []chan idleConn //阻塞请求队列，等连接数达到最大限制时，后续请求将插入此队列等待可用连接
+	numActive    int             //正在使用的連線數
 	numOpen      int             //已建立连接或等待建立连接数
 	closed       bool            //pool是否關閉
 	maxIdle      int             //最大空闲连接数
 	maxOpen      int             //最大连接数
-	idleTimeout time.Duration 	 //连接最大空闲时间，超过该事件则将失效
+	idleTimeout  time.Duration   //连接最大空闲时间，超过该事件则将失效
 	strategy     policyType
 }
 
@@ -49,16 +50,17 @@ func NewPool(poolConfig *Config) (Pool, error) {
 	}
 
 	cp := &channelPool{
-		factory:  poolConfig.Factory,
-		close:    poolConfig.Close,
-		ping:     nil,
-		freeConn: make([]*idleConn, 0, poolConfig.MaxCap),
-		numOpen:  0,
-		closed:   false,
-		maxIdle:  poolConfig.InitialCap,
-		maxOpen:  poolConfig.MaxCap,
+		factory:     poolConfig.Factory,
+		close:       poolConfig.Close,
+		ping:        nil,
+		freeConn:    make([]*idleConn, 0, poolConfig.MaxCap),
+		numActive:   0,
+		numOpen:     0,
+		closed:      false,
+		maxIdle:     poolConfig.InitialCap,
+		maxOpen:     poolConfig.MaxCap,
 		idleTimeout: poolConfig.IdleTimeout,
-		strategy: cachedOrNewConn,
+		strategy:    cachedOrNewConn,
 	}
 
 	if poolConfig.Ping != nil {
@@ -113,6 +115,7 @@ func (cp *channelPool) Put(conn interface{}) error {
 		cp.waitingQueue = cp.waitingQueue[:c-1]
 		req <- idleConn{conn: conn, inUse: true, t: time.Now()}
 	} else {
+		cp.numActive--
 		cp.freeConn = append(cp.freeConn, &idleConn{conn: conn, inUse: false, t: time.Now()})
 	}
 	cp.Unlock()
@@ -158,6 +161,19 @@ func (cp *channelPool) Release() {
 	}
 }
 
+func (cp *channelPool) GetPoolSize() (InitialCap int, MaxCap int, Current int, Err error) {
+	InitialCap = cp.maxIdle
+	MaxCap = cp.maxOpen
+	cp.Lock()
+	if cp.closed {
+		cp.Unlock()
+		return 0, 0, 0, ErrPoolClosed
+	}
+	Current = cp.numActive
+	cp.Unlock()
+	return InitialCap, MaxCap, Current, nil
+}
+
 func (cp *channelPool) getWithBlock(block bool) (interface{}, error) {
 	cp.Lock()
 	if cp.closed {
@@ -181,11 +197,13 @@ func (cp *channelPool) getWithBlock(block bool) (interface{}, error) {
 					cp.Unlock()
 					return nil, err
 				}
+				cp.numActive++
 				ic := &idleConn{conn: subconn, inUse: true, t: time.Now()}
 				cp.Unlock()
 				return ic.conn, nil
 			}
 		}
+		cp.numActive++
 		conn.inUse = true
 		cp.Unlock()
 		return conn.conn, nil
@@ -220,6 +238,7 @@ func (cp *channelPool) getWithBlock(block bool) (interface{}, error) {
 		cp.Unlock()
 		return nil, err
 	}
+	cp.numActive++
 	ic := &idleConn{conn: conn, inUse: true, t: time.Now()}
 	return ic.conn, nil
 }

@@ -45,4 +45,6 @@ type Pool interface {
 	Close(interface{}) error
 
 	Release()
+
+	GetPoolSize()(InitialCap int, MaxCap int, Current int, Err error)
 }
