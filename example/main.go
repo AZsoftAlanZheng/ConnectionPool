@@ -94,6 +94,12 @@ RETRY:
 	cn := v.(net.Conn)
 	fmt.Println("num:", num, " Got the connction:", cn.LocalAddr())
 
+	_, _, current, err := p.GetPoolSize()
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("num:", num, "the number of active connections: ", current)
+
 	// 如果連線有問題，可以關閉它，再重新取得一個新連線
 	if _, err = cn.Write(nil); err != nil {
 		p.Close(cn)
