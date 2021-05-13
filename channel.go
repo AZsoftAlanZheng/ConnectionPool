@@ -19,6 +19,7 @@ type channelPool struct {
 	close   func(interface{}) error
 	ping    func(interface{}) error
 
+	isEmptyPool  bool            //是否為空的連接池
 	sync.Mutex                   //锁，操作pool时用到
 	freeConn     []*idleConn     //空闲连接
 	waitingQueue []chan idleConn //阻塞请求队列，等连接数达到最大限制时，后续请求将插入此队列等待可用连接
@@ -39,7 +40,23 @@ type idleConn struct {
 
 // NewPool 初始化连接
 func NewPool(poolConfig *Config) (Pool, error) {
-	if poolConfig.InitialCap < 0 || poolConfig.MaxCap < 0 || poolConfig.InitialCap > poolConfig.MaxCap {
+	if poolConfig.MaxCap < 0 {
+		return &channelPool{
+			isEmptyPool: true,
+			factory:     nil,
+			close:       nil,
+			ping:        nil,
+			freeConn:    nil,
+			numActive:   0,
+			numOpen:     0,
+			closed:      false,
+			maxIdle:     poolConfig.InitialCap,
+			maxOpen:     poolConfig.MaxCap,
+			idleTimeout: poolConfig.IdleTimeout,
+			strategy:    cachedOrNewConn,
+		}, nil
+	}
+	if poolConfig.InitialCap < 0 || (poolConfig.MaxCap > 0 && poolConfig.InitialCap > poolConfig.MaxCap) {
 		return nil, ErrInvalidCapacity
 	}
 	if poolConfig.Factory == nil {
@@ -50,6 +67,7 @@ func NewPool(poolConfig *Config) (Pool, error) {
 	}
 
 	cp := &channelPool{
+		isEmptyPool: false,
 		factory:     poolConfig.Factory,
 		close:       poolConfig.Close,
 		ping:        nil,
@@ -92,6 +110,9 @@ func (cp *channelPool) GetTry() (interface{}, error) {
 // Put 将连接放回pool中
 // 如果pool已經關閉，會把連線關閉，回傳ErrPoolClosedAndClose
 func (cp *channelPool) Put(conn interface{}) error {
+	if cp.isEmptyPool {
+		return nil
+	}
 	if conn == nil {
 		return ErrConnIsNil
 	}
@@ -124,6 +145,9 @@ func (cp *channelPool) Put(conn interface{}) error {
 
 // Ping 检查单条连接是否有效
 func (cp *channelPool) Ping(conn interface{}) error {
+	if cp.isEmptyPool {
+		return nil
+	}
 	if conn == nil {
 		return ErrConnIsNil
 	}
@@ -136,6 +160,9 @@ func (cp *channelPool) Ping(conn interface{}) error {
 // Close 關閉一條連線，並將已開啟連線數減一
 // 如果pool已經關閉，會把連線關閉，回傳ErrPoolClosedAndClose
 func (cp *channelPool) Close(conn interface{}) error {
+	if cp.isEmptyPool {
+		return nil
+	}
 	if conn == nil {
 		return ErrConnIsNil
 	}
@@ -152,6 +179,9 @@ func (cp *channelPool) Close(conn interface{}) error {
 
 // Release 释放连接池中所有连接
 func (cp *channelPool) Release() {
+	if cp.isEmptyPool {
+		return
+	}
 	cp.Lock()
 	cp.closed = true
 	cp.Unlock()
@@ -164,6 +194,9 @@ func (cp *channelPool) Release() {
 func (cp *channelPool) GetPoolSize() (InitialCap int, MaxCap int, Current int, Err error) {
 	InitialCap = cp.maxIdle
 	MaxCap = cp.maxOpen
+	if cp.isEmptyPool {
+		return InitialCap, MaxCap, 0, nil
+	}
 	cp.Lock()
 	if cp.closed {
 		cp.Unlock()
@@ -175,6 +208,9 @@ func (cp *channelPool) GetPoolSize() (InitialCap int, MaxCap int, Current int, E
 }
 
 func (cp *channelPool) getWithBlock(block bool) (interface{}, error) {
+	if cp.isEmptyPool {
+		return nil, ErrPoolNoActiveConnection
+	}
 	cp.Lock()
 	if cp.closed {
 		cp.Unlock()

@@ -54,10 +54,10 @@ func initPool() pool.Pool {
 
 	//创建一个连接池
 	poolConfig := &pool.Config{
-		InitialCap: poolInitNum,
-		MaxCap:     poolNum,
-		Factory:    factory,
-		Close:      close,
+		InitialCap:  poolInitNum,
+		MaxCap:      poolNum,
+		Factory:     factory,
+		Close:       close,
 		IdleTimeout: time.Second,
 	}
 	p, err := pool.NewPool(poolConfig)
