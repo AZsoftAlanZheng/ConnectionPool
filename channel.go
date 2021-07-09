@@ -100,7 +100,9 @@ func (cp *channelPool) Put(conn interface{}) error {
 		return ErrPoolClosedAndClose
 	}
 
+	fmt.Printf("before lock: %d", time.Now().UnixNano())
 	cp.Lock()
+	fmt.Printf("after lock: %d", time.Now().UnixNano())
 	if cp.maxOpen > 0 && cp.numOpen > cp.maxOpen {
 		cp.Unlock()
 		return ErrOpenNumber
@@ -111,14 +113,20 @@ func (cp *channelPool) Put(conn interface{}) error {
 		// This copy is O(n) but in practice faster than a linked list.
 		// TODO: consider compacting it down less often and
 		// moving the base instead?
+		fmt.Printf("before copy: %d", time.Now().UnixNano())
 		copy(cp.waitingQueue, cp.waitingQueue[1:])
+		fmt.Printf("after copy: %d", time.Now().UnixNano())
 		cp.waitingQueue = cp.waitingQueue[:c-1]
 		req <- idleConn{conn: conn, inUse: true, t: time.Now()}
 	} else {
 		cp.numActive--
+		fmt.Printf("before append: %d", time.Now().UnixNano())
 		cp.freeConn = append(cp.freeConn, &idleConn{conn: conn, inUse: false, t: time.Now()})
+		fmt.Printf("after append: %d", time.Now().UnixNano())
 	}
+	fmt.Printf("before Unlock: %d", time.Now().UnixNano())
 	cp.Unlock()
+	fmt.Printf("after Unlock: %d", time.Now().UnixNano())
 	return nil
 }
 
