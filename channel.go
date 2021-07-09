@@ -100,9 +100,9 @@ func (cp *channelPool) Put(conn interface{}) error {
 		return ErrPoolClosedAndClose
 	}
 
-	fmt.Printf("before lock: %d", time.Now().UnixNano())
+	fmt.Printf("before lock: %s\n", time.Now().String())
 	cp.Lock()
-	fmt.Printf("after lock: %d", time.Now().UnixNano())
+	fmt.Printf("after lock: %s\n", time.Now().String())
 	if cp.maxOpen > 0 && cp.numOpen > cp.maxOpen {
 		cp.Unlock()
 		return ErrOpenNumber
