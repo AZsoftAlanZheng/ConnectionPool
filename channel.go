@@ -185,7 +185,7 @@ func (cp *channelPool) GetPoolSize() (InitialCap int, MaxCap int, Current int, E
 func (cp *channelPool) getWithBlock(block bool) (interface{}, error) {
 	fmt.Printf("getWithBlock:%t before Unlock: %s\n", block, time.Now().String())
 	cp.Lock()
-	fmt.Printf("getWithBlock:%t before Unlock: %s\n", block, time.Now().String())
+	fmt.Printf("getWithBlock:%t after Unlock: %s\n", block, time.Now().String())
 	if cp.closed {
 		cp.Unlock()
 		return nil, ErrPoolClosed
@@ -214,6 +214,7 @@ func (cp *channelPool) getWithBlock(block bool) (interface{}, error) {
 				cp.numActive++
 				ic := &idleConn{conn: subconn, inUse: true, t: time.Now()}
 				cp.Unlock()
+				fmt.Printf("getWithBlock:%t 4.1: %s\n", block, time.Now().String())
 				return ic.conn, nil
 			}
 		}
