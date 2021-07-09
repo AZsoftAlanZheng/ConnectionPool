@@ -100,9 +100,9 @@ func (cp *channelPool) Put(conn interface{}) error {
 		return ErrPoolClosedAndClose
 	}
 
-	fmt.Printf("before lock: %s\n", time.Now().String())
+	fmt.Printf("Put before lock: %s\n", time.Now().String())
 	cp.Lock()
-	fmt.Printf("after lock: %s\n", time.Now().String())
+	fmt.Printf("Put after lock: %s\n", time.Now().String())
 	if cp.maxOpen > 0 && cp.numOpen > cp.maxOpen {
 		cp.Unlock()
 		return ErrOpenNumber
@@ -113,20 +113,20 @@ func (cp *channelPool) Put(conn interface{}) error {
 		// This copy is O(n) but in practice faster than a linked list.
 		// TODO: consider compacting it down less often and
 		// moving the base instead?
-		fmt.Printf("before copy: %s\n", time.Now().String())
+		fmt.Printf("Put before copy: %s\n", time.Now().String())
 		copy(cp.waitingQueue, cp.waitingQueue[1:])
-		fmt.Printf("after copy: %d\n", time.Now())
+		fmt.Printf("Put after copy: %d\n", time.Now())
 		cp.waitingQueue = cp.waitingQueue[:c-1]
 		req <- idleConn{conn: conn, inUse: true, t: time.Now()}
 	} else {
 		cp.numActive--
-		fmt.Printf("before append: %s\n", time.Now().String())
+		fmt.Printf("Put before append: %s\n", time.Now().String())
 		cp.freeConn = append(cp.freeConn, &idleConn{conn: conn, inUse: false, t: time.Now()})
-		fmt.Printf("after append: %s\n", time.Now().String())
+		fmt.Printf("Put after append: %s\n", time.Now().String())
 	}
-	fmt.Printf("before Unlock: %s\n", time.Now().String())
+	fmt.Printf("Put before Unlock: %s\n", time.Now().String())
 	cp.Unlock()
-	fmt.Printf("after Unlock: %s\n", time.Now().String())
+	fmt.Printf("Put after Unlock: %s\n", time.Now().String())
 	return nil
 }
 
@@ -183,19 +183,25 @@ func (cp *channelPool) GetPoolSize() (InitialCap int, MaxCap int, Current int, E
 }
 
 func (cp *channelPool) getWithBlock(block bool) (interface{}, error) {
+	fmt.Printf("getWithBlock:%t before Unlock: %s\n", block, time.Now().String())
 	cp.Lock()
+	fmt.Printf("getWithBlock:%t before Unlock: %s\n", block, time.Now().String())
 	if cp.closed {
 		cp.Unlock()
 		return nil, ErrPoolClosed
 	}
 
 	//从freeConn取一个空闲连接
+	fmt.Printf("getWithBlock:%t 1: %s\n", block, time.Now().String())
 	numFree := len(cp.freeConn)
 	if cp.strategy == cachedOrNewConn && numFree > 0 {
 		conn := cp.freeConn[0]
+		fmt.Printf("getWithBlock:%t 2: %s\n", block, time.Now().String())
 		copy(cp.freeConn, cp.freeConn[1:])
+		fmt.Printf("getWithBlock:%t 3: %s\n", block, time.Now().String())
 		cp.freeConn = cp.freeConn[:numFree-1]
 		//判断是否超时，超时则丢弃
+		fmt.Printf("getWithBlock:%t 4: %s\n", block, time.Now().String())
 		if timeout := cp.idleTimeout; timeout > 0 {
 			if conn.t.Add(timeout).Before(time.Now()) {
 				//丢弃并关闭该连接
@@ -211,14 +217,17 @@ func (cp *channelPool) getWithBlock(block bool) (interface{}, error) {
 				return ic.conn, nil
 			}
 		}
+		fmt.Printf("getWithBlock:%t 5: %s\n", block, time.Now().String())
 		cp.numActive++
 		conn.inUse = true
 		cp.Unlock()
+		fmt.Printf("getWithBlock:%t 5.1: %s\n", block, time.Now().String())
 		return conn.conn, nil
 	}
 
 	//如果没有空闲连接，而且当前建立的连接数已经达到最大限制则将请求加入waitingQueue队列，
 	//并阻塞在这里，直到其它协程将占用的连接释放或connectionOpenner创建
+	fmt.Printf("getWithBlock:%t 6: %s\n", block, time.Now().String())
 	if cp.maxOpen > 0 && cp.numOpen >= cp.maxOpen {
 		if !block {
 			cp.Unlock()
@@ -226,9 +235,12 @@ func (cp *channelPool) getWithBlock(block bool) (interface{}, error) {
 		}
 		// Make the connRequest channel. It's buffered so that the
 		// connectionOpener doesn't block while waiting for the req to be read.
+		fmt.Printf("getWithBlock:%t 6.1: %s\n", block, time.Now().String())
 		req := make(chan idleConn, 1)
 		cp.waitingQueue = append(cp.waitingQueue, req)
+		fmt.Printf("getWithBlock:%t 6.2: %s\n", block, time.Now().String())
 		cp.Unlock()
+		fmt.Printf("getWithBlock:%t 6.3: %s\n", block, time.Now().String())
 		ret, ok := <-req //阻塞
 		if !ok {
 			return nil, ErrPoolClosed
@@ -236,17 +248,21 @@ func (cp *channelPool) getWithBlock(block bool) (interface{}, error) {
 		ret.inUse = true
 		return ret.conn, nil
 	}
+	fmt.Printf("getWithBlock:%t 7: %s\n", block, time.Now().String())
 
 	cp.numOpen++ //上面说了numOpen是已经建立或即将建立连接数，这里还没有建立连接，只是乐观的认为后面会成功，失败的时候再将此值减1
 	cp.Unlock()
+	fmt.Printf("getWithBlock:%t 8: %s\n", block, time.Now().String())
 	conn, err := cp.factory()
 	if err != nil {
 		cp.Lock()
 		cp.numOpen--
 		cp.Unlock()
+		fmt.Printf("getWithBlock:%t 9: %s\n", block, time.Now().String())
 		return nil, err
 	}
 	cp.numActive++
 	ic := &idleConn{conn: conn, inUse: true, t: time.Now()}
+	fmt.Printf("getWithBlock:%t 10: %s\n", block, time.Now().String())
 	return ic.conn, nil
 }
