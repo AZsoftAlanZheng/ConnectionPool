@@ -200,28 +200,23 @@ func (cp *channelPool) getWithBlock(block bool) (interface{}, error) {
 		copy(cp.freeConn, cp.freeConn[1:])
 		fmt.Printf("getWithBlock:%t 3: %s\n", block, time.Now().String())
 		cp.freeConn = cp.freeConn[:numFree-1]
-		//判断是否超时，超时则丢弃
-		fmt.Printf("getWithBlock:%t 4: %s\n", block, time.Now().String())
-		if timeout := cp.idleTimeout; timeout > 0 {
-			if conn.t.Add(timeout).Before(time.Now()) {
-				//丢弃并关闭该连接
-				cp.close(conn.conn)
-				subconn, err := cp.factory()
-				if err != nil {
-					cp.Unlock()
-					return nil, err
-				}
-				cp.numActive++
-				ic := &idleConn{conn: subconn, inUse: true, t: time.Now()}
-				cp.Unlock()
-				fmt.Printf("getWithBlock:%t 4.1: %s\n", block, time.Now().String())
-				return ic.conn, nil
-			}
-		}
-		fmt.Printf("getWithBlock:%t 5: %s\n", block, time.Now().String())
 		cp.numActive++
 		conn.inUse = true
 		cp.Unlock()
+		//判断是否超时，超时则丢弃
+		fmt.Printf("getWithBlock:%t 4: %s\n", block, time.Now().String())
+		if timeout := cp.idleTimeout; timeout > 0 && conn.t.Add(timeout).Before(time.Now()) {
+			//丢弃并关闭该连接
+			cp.close(conn.conn)
+			subconn, err := cp.factory()
+			if err != nil {
+				return nil, err
+			}
+			ic := &idleConn{conn: subconn, inUse: true, t: time.Now()}
+			fmt.Printf("getWithBlock:%t 4.1: %s\n", block, time.Now().String())
+			return ic.conn, nil
+		}
+		fmt.Printf("getWithBlock:%t 5: %s\n", block, time.Now().String())
 		fmt.Printf("getWithBlock:%t 5.1: %s\n", block, time.Now().String())
 		return conn.conn, nil
 	}
