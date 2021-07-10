@@ -196,6 +196,9 @@ func (cp *channelPool) getWithBlock(block bool) (interface{}, error) {
 			cp.close(conn.conn)
 			subconn, err := cp.factory()
 			if err != nil {
+				cp.Lock()
+				cp.numOpen--
+				cp.Unlock()
 				return nil, err
 			}
 			ic := &idleConn{conn: subconn, inUse: true, t: time.Now()}
