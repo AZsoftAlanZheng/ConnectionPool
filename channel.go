@@ -146,6 +146,7 @@ func (cp *channelPool) Close(conn interface{}) error {
 
 	cp.Lock()
 	cp.numOpen--
+	cp.numActive--
 	cp.Unlock()
 	return cp.close(conn)
 }
