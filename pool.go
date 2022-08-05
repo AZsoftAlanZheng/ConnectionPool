@@ -14,6 +14,7 @@ var (
 	ErrConnIsNil          = errors.New("connection is nil. rejecting")
 	ErrPoolClosed         = errors.New("pool is closed")
 	ErrPoolClosedAndClose = errors.New("connction pool is closed. close connection")
+	ErrPoolFull           = errors.New("connction pool is full")
 )
 
 // Config 连接池相关配置
@@ -46,5 +47,5 @@ type Pool interface {
 
 	Release()
 
-	GetPoolSize()(InitialCap int, MaxCap int, Current int, Err error)
+	GetPoolSize() (InitialCap int, MaxCap int, Current int, Err error)
 }

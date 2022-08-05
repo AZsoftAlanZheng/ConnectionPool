@@ -216,7 +216,7 @@ func (cp *channelPool) getWithBlock(block bool) (interface{}, error) {
 	if cp.maxOpen > 0 && cp.numOpen >= cp.maxOpen {
 		if !block {
 			cp.Unlock()
-			return nil, nil
+			return nil, ErrPoolFull
 		}
 		// Make the connRequest channel. It's buffered so that the
 		// connectionOpener doesn't block while waiting for the req to be read.
