@@ -203,11 +203,9 @@ func (cp *channelPool) getWithBlock(block bool) (interface{}, error) {
 				return nil, err
 			}
 			ic := &idleConn{conn: subconn, inUse: true, t: time.Now()}
-			fmt.Printf("getWithBlock:%t 4.1: %s\n", block, time.Now().String())
 			return ic.conn, nil
 		}
-		fmt.Printf("getWithBlock:%t 5: %s\n", block, time.Now().String())
-		fmt.Printf("getWithBlock:%t 5.1: %s\n", block, time.Now().String())
+
 		return conn.conn, nil
 	}
 
